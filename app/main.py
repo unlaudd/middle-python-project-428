@@ -27,6 +27,18 @@ def create_app() -> FastAPI:
     """
     app = FastAPI()
 
+    @app.api_route("/api/health", methods=["GET", "HEAD"])
+    async def health_check() -> dict:
+        """Проверка работоспособности приложения (Health Check).
+
+        Не обращается к базе данных, проверяет только, что сервер
+        поднят и способен обрабатывать запросы.
+
+        Returns:
+            dict: Словарь со статусом "ok".
+        """
+        return {"status": "ok"}
+
     @app.api_route("/api/cities", methods=["GET", "HEAD"])
     async def get_cities() -> list:
         """Возвращает список доступных городов для бронирования.
@@ -58,7 +70,10 @@ def create_app() -> FastAPI:
             JSONResponse: Ошибка 404 в формате JSON для несуществующих API путей.
         """
         if path.startswith("api/"):
-            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+            return JSONResponse(
+                status_code=404,
+                content={"code": "not_found", "message": "Not Found"},
+            )
 
         file_path = (PUBLIC_DIR / path).resolve()
 
@@ -69,6 +84,9 @@ def create_app() -> FastAPI:
         if index_path.is_file():
             return FileResponse(index_path)
 
-        return JSONResponse(status_code=404, content={"detail": "Not Found"})
+        return JSONResponse(
+            status_code=404,
+            content={"code": "not_found", "message": "Not Found"},
+        )
 
     return app

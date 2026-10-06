@@ -11,6 +11,8 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.0.0",
     "ruff>=0.16.10",
 ]
 
@@ -20,11 +22,14 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "D"]
-# Игнорируем конфликтующие правила, оставляя только те, что соответствуют Google Style
 ignore = [
-    "D203", # 1 blank line required before class docstring (конфликтует с D211)
-    "D213", # Multi-line docstring summary should start at the second line (конфликтует с D212)
+    "D203",
+    "D213",
 ]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

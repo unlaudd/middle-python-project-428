@@ -1,6 +1,7 @@
 # Бекенд для бронирования авиабилетов (Python)
 
 [![hexlet-check](https://github.com/unlaudd/middle-python-project-428/actions/workflows/hexlet-check.yml/badge.svg)](https://github.com/unlaudd/middle-python-project-428/actions)
+[![Tests](https://github.com/unlaudd/middle-python-project-428/actions/workflows/test.yml/badge.svg)](https://github.com/unlaudd/middle-python-project-428/actions/workflows/test.yml)
 
 Реализуйте бекенд сервиса бронирования авиабилетов: справочник городов, поиск рейсов,
 оформление, просмотр и отмену брони. Фреймворк выбираете сами, данные храните в PostgreSQL.

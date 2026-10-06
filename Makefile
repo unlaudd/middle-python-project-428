@@ -1,4 +1,4 @@
-.PHONY: help install build start clean contract
+.PHONY: help install build start clean contract test
 
 .DEFAULT_GOAL := help
 
@@ -16,6 +16,9 @@ build: ## Собрать фронтенд и скопировать статич
 
 contract: ## Сгенерировать OpenAPI спецификацию из TypeSpec контракта
 	npx tsp compile contract
+
+test: ## Запустить тесты с помощью pytest
+	uv run pytest -v
 
 start: ## Запустить ASGI-сервер разработки (порт берется из PORT, по умолчанию 8080)
 	uv run uvicorn --factory app.main:create_app --host 0.0.0.0 --port $${PORT:-8080}
