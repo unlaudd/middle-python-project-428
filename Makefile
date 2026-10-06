@@ -1,6 +1,5 @@
-.PHONY: help install build start clean
+.PHONY: help install build start clean contract
 
-# По умолчанию показываем справку, если запущен просто make
 .DEFAULT_GOAL := help
 
 help: ## Показать это справочное сообщение со списком доступных команд
@@ -15,6 +14,9 @@ build: ## Собрать фронтенд и скопировать статич
 	mkdir -p public
 	cp -R node_modules/@hexlet/python-flight-booking-frontend/dist/. public/
 
+contract: ## Сгенерировать OpenAPI спецификацию из TypeSpec контракта
+	npx tsp compile contract
+
 start: ## Запустить ASGI-сервер разработки (порт берется из PORT, по умолчанию 8080)
 	uv run uvicorn --factory app.main:create_app --host 0.0.0.0 --port $${PORT:-8080}
 
@@ -23,3 +25,4 @@ clean: ## Очистить сгенерированные файлы, кэш и 
 	rm -rf .venv
 	rm -rf node_modules
 	rm -f uv.lock package-lock.json
+	rm -f openapi.yaml
