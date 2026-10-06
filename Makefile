@@ -1,0 +1,25 @@
+.PHONY: help install build start clean
+
+# По умолчанию показываем справку, если запущен просто make
+.DEFAULT_GOAL := help
+
+help: ## Показать это справочное сообщение со списком доступных команд
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+install: ## Установить зависимости проекта (Python через uv и Node.js через npm)
+	uv sync
+	npm ci
+
+build: ## Собрать фронтенд и скопировать статические файлы в директорию public/
+	rm -rf public/assets public/index.html
+	mkdir -p public
+	cp -R node_modules/@hexlet/python-flight-booking-frontend/dist/. public/
+
+start: ## Запустить ASGI-сервер разработки (порт берется из PORT, по умолчанию 8080)
+	uv run uvicorn --factory app.main:create_app --host 0.0.0.0 --port $${PORT:-8080}
+
+clean: ## Очистить сгенерированные файлы, кэш и виртуальные окружения
+	rm -rf public
+	rm -rf .venv
+	rm -rf node_modules
+	rm -f uv.lock package-lock.json
