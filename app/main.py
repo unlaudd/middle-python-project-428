@@ -4,18 +4,19 @@
 раздачи статических файлов с поддержкой SPA-fallback для корректной
 работы клиентского роутинга (Vue/React и т.д.).
 """
-
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 
+from app.db import get_db_pool, lifespan
+
 
 def create_app() -> FastAPI:
     """Создает и настраивает экземпляр приложения FastAPI.
 
-    Инициализирует маршруты для API и настраивает раздачу статических файлов
-    с поддержкой SPA-fallback.
+    Инициализирует маршруты для API, настраивает раздачу статических файлов
+    и регистрирует обработчик lifespan для управления базой данных.
 
     Returns:
         FastAPI: Настроенный экземпляр приложения FastAPI.
@@ -25,7 +26,8 @@ def create_app() -> FastAPI:
         >>> isinstance(app, FastAPI)
         True
     """
-    app = FastAPI()
+    # Передаем lifespan для корректного управления ресурсами (включая тесты)
+    app = FastAPI(lifespan=lifespan)
 
     @app.api_route("/api/health", methods=["GET", "HEAD"])
     async def health_check() -> dict:
@@ -41,15 +43,28 @@ def create_app() -> FastAPI:
 
     @app.api_route("/api/cities", methods=["GET", "HEAD"])
     async def get_cities() -> list:
-        """Возвращает список доступных городов для бронирования.
+        """Возвращает список доступных городов для бронирования из базы данных.
 
-        На текущем этапе реализации возвращает пустой список.
-        Данные будут наполнены на следующих шагах проекта.
+        Гарантирует, что Москва (MOW) и Санкт-Петербург (LED) всегда 
+        находятся в начале списка, так как фронтенд использует их 
+        для поиска по умолчанию.
 
         Returns:
-            list: Список словарей с информацией о городах.
+            list[dict]: Список словарей с информацией о городах (code, name, country).
         """
-        return []
+        pool = get_db_pool()
+        async with pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("""
+                    SELECT code, name, country FROM cities 
+                    ORDER BY 
+                        CASE WHEN code = 'MOW' THEN 1 
+                             WHEN code = 'LED' THEN 2 
+                             ELSE 3 END, 
+                        name
+                """)
+                rows = await cur.fetchall()
+                return [{"code": r[0], "name": r[1], "country": r[2]} for r in rows]
 
     PUBLIC_DIR = Path(__file__).resolve().parent.parent / "public"
 

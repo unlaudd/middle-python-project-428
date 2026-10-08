@@ -3,7 +3,6 @@
 Содержит тесты для проверки работоспособности эндпоинтов,
 SPA-fallback и корректности форматов ответов согласно контракту API.
 """
-
 from pathlib import Path
 
 import pytest
@@ -16,11 +15,16 @@ from app.main import create_app
 def client():
     """Создает TestClient для тестирования приложения.
 
-    Returns:
+    Использование контекстного менеджера (with) гарантирует,
+    что события lifespan (startup/shutdown) будут корректно
+    вызваны, включая инициализацию пула подключений к БД.
+
+    Yields:
         TestClient: Клиент для выполнения HTTP-запросов к приложению.
     """
     app = create_app()
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 @pytest.fixture(autouse=True)

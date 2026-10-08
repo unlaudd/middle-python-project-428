@@ -1,4 +1,4 @@
-.PHONY: help install build start clean contract test
+.PHONY: help install build start clean contract test migrate seed
 
 .DEFAULT_GOAL := help
 
@@ -17,11 +17,17 @@ build: ## Собрать фронтенд и скопировать статич
 contract: ## Сгенерировать OpenAPI спецификацию из TypeSpec контракта
 	npx tsp compile contract
 
+migrate: ## Применить миграции базы данных
+	uv run python -m app.migrate
+
+seed: ## Залить справочные данные (идемпотентно)
+	uv run python -m app.seed
+
+start: migrate seed ## Применить миграции, залить данные и запустить сервер
+	uv run uvicorn --factory app.main:create_app --host 0.0.0.0 --port $${PORT:-8080}
+
 test: ## Запустить тесты с помощью pytest
 	uv run pytest -v
-
-start: ## Запустить ASGI-сервер разработки (порт берется из PORT, по умолчанию 8080)
-	uv run uvicorn --factory app.main:create_app --host 0.0.0.0 --port $${PORT:-8080}
 
 clean: ## Очистить сгенерированные файлы, кэш и виртуальные окружения
 	rm -rf public
