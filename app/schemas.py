@@ -29,3 +29,11 @@ class BookingRequest(BaseModel):
     passengers: list[PassengerRequest] = Field(
         ..., min_length=1, description="Список пассажиров (минимум 1)"
     )
+
+
+class CancelBookingRequest(BaseModel):
+    """Схема запроса на отмену бронирования."""
+
+    lastName: str | None = Field(
+        default=None, description="Фамилия пассажира для подтверждения"
+    )

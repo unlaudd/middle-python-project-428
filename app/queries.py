@@ -236,3 +236,110 @@ async def create_booking(
                     continue
 
             raise RuntimeError("Не удалось сгенерировать уникальный код брони")
+
+
+async def get_and_verify_booking(
+    pool: AsyncConnectionPool, code: str, last_name: str | None
+) -> tuple[dict, list[dict]] | None:
+    """Ищет бронь по коду и проверяет фамилию пассажира.
+
+    Args:
+        pool: Активный пул соединений с БД.
+        code: Код брони.
+        last_name: Фамилия для проверки.
+
+    Returns:
+        tuple[dict, list[dict]] | None: Данные брони и пассажиров, или None.
+    """
+    if not last_name:
+        return None
+
+    code = code.strip().upper()
+    last_name_clean = last_name.strip().lower()
+
+    async with pool.connection() as conn:
+        async with conn.cursor(row_factory=dict_row) as cur:
+            # Шаг 1: Проверяем существование брони и совпадение фамилии
+            await cur.execute(
+                """
+                SELECT 1 FROM bookings b
+                JOIN passengers p ON b.code = p.booking_code
+                WHERE b.code = %s AND LOWER(TRIM(p.last_name)) = %s
+                """,
+                (code, last_name_clean),
+            )
+            if not await cur.fetchone():
+                return None
+
+            # Шаг 2: Забираем полные данные брони
+            await cur.execute(
+                """
+                SELECT 
+                    b.code, b.status, b.total_price_amount, b.created_at, 
+                    b.contact_email, b.contact_phone,
+                    f.id AS id, f.flight_number, f.duration_minutes, 
+                    f.seats_available, f.price_amount, f.departure_at, f.arrival_at,
+                    a.code AS airline_code, a.name AS airline_name,
+                    o.code AS origin_code, o.name AS origin_name, 
+                    o.country AS origin_country,
+                    d.code AS dest_code, d.name AS dest_name, 
+                    d.country AS dest_country
+                FROM bookings b
+                JOIN flights f ON b.flight_id = f.id
+                JOIN airlines a ON f.airline_code = a.code
+                JOIN cities o ON f.origin_code = o.code
+                JOIN cities d ON f.destination_code = d.code
+                WHERE b.code = %s
+                """,
+                (code,),
+            )
+            booking_row = await cur.fetchone()
+            if not booking_row:
+                return None
+
+            # Шаг 3: Забираем всех пассажиров этой брони
+            await cur.execute(
+                """
+                SELECT first_name, last_name, date_of_birth, document_number 
+                FROM passengers 
+                WHERE booking_code = %s
+                """,
+                (code,),
+            )
+            passenger_rows = await cur.fetchall()
+            return booking_row, passenger_rows
+
+
+async def cancel_booking(
+    pool: AsyncConnectionPool, code: str, last_name: str | None
+) -> tuple[dict, list[dict]] | None:
+    """Отменяет бронь, если код и фамилия совпадают.
+
+    Args:
+        pool: Активный пул соединений с БД.
+        code: Код брони.
+        last_name: Фамилия для проверки.
+
+    Returns:
+        tuple[dict, list[dict]] | None: Обновленные данные брони и пассажиров,
+                                        или None, если проверка не прошла.
+    """
+    # Сначала проверяем, что бронь существует и фамилия верна
+    result = await get_and_verify_booking(pool, code, last_name)
+    if not result:
+        return None
+
+    booking_row, passenger_rows = result
+    code = code.strip().upper()
+
+    # Обновляем статус на cancelled
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "UPDATE bookings SET status = 'cancelled' WHERE code = %s",
+                (code,),
+            )
+
+    # Возвращаем обновленные данные (меняем статус в словаре для ответа)
+    booking_row["status"] = "cancelled"
+    return booking_row, passenger_rows

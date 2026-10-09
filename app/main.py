@@ -7,8 +7,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.db import get_db_pool, lifespan
-from app.queries import create_booking, get_flight_by_id, get_flights
-from app.schemas import BookingRequest
+from app.queries import (
+    cancel_booking,
+    create_booking,
+    get_and_verify_booking,
+    get_flight_by_id,
+    get_flights,
+)
+from app.schemas import BookingRequest, CancelBookingRequest
 
 
 def format_datetime(dt) -> str:
@@ -176,6 +182,30 @@ def create_app() -> FastAPI:
                 )
             raise
 
+        return format_booking(booking_row, passenger_rows)
+
+    @app.get("/api/bookings/{code}")
+    async def get_booking(code: str, lastName: str | None = Query(default=None)):
+        """Просматривает бронь по коду и фамилии пассажира."""
+        pool = get_db_pool()
+        result = await get_and_verify_booking(pool, code, lastName)
+
+        if not result:
+            raise HTTPException(status_code=404, detail="Бронь не найдена")
+
+        booking_row, passenger_rows = result
+        return format_booking(booking_row, passenger_rows)
+
+    @app.post("/api/bookings/{code}/cancel")
+    async def cancel_booking_endpoint(code: str, request: CancelBookingRequest):
+        """Отменяет бронь по коду и фамилии пассажира."""
+        pool = get_db_pool()
+        result = await cancel_booking(pool, code, request.lastName)
+
+        if not result:
+            raise HTTPException(status_code=404, detail="Бронь не найдена")
+
+        booking_row, passenger_rows = result
         return format_booking(booking_row, passenger_rows)
 
     PUBLIC_DIR = Path(__file__).resolve().parent.parent / "public"

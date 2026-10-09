@@ -156,3 +156,173 @@ def test_create_booking_unknown_flight(client):
     assert response.status_code == 400
     assert response.json()["code"] == "validation_error"
     assert "Неизвестный идентификатор рейса" in response.json()["message"]
+
+
+def test_get_booking_success(client):
+    """Успешный просмотр брони по коду и фамилии."""
+    # 1. Создаем бронь
+    flight_id = get_valid_flight_id(client)
+    payload = {
+        "flightId": flight_id,
+        "contact": {"email": "test@example.com", "phone": "+79991234567"},
+        "passengers": [
+            {
+                "firstName": "Иван",
+                "lastName": "Петров",
+                "dateOfBirth": "1990-05-20",
+                "documentNumber": "1",
+            }
+        ],
+    }
+    create_resp = client.post("/api/bookings", json=payload)
+    booking_code = create_resp.json()["code"]
+
+    # 2. Ищем её
+    response = client.get(f"/api/bookings/{booking_code}?lastName=Петров")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["code"] == booking_code
+    assert data["status"] == "confirmed"
+
+
+def test_get_booking_case_insensitive(client):
+    """Поиск должен работать независимо от регистра и пробелов."""
+    flight_id = get_valid_flight_id(client)
+    payload = {
+        "flightId": flight_id,
+        "contact": {"email": "test@example.com", "phone": "+79991234567"},
+        "passengers": [
+            {
+                "firstName": "Иван",
+                "lastName": "Петров",
+                "dateOfBirth": "1990-05-20",
+                "documentNumber": "1",
+            }
+        ],
+    }
+    booking_code = client.post("/api/bookings", json=payload).json()["code"]
+
+    # Разный регистр и лишние пробелы
+    response = client.get(f"/api/bookings/{booking_code}?lastName=  петров  ")
+    assert response.status_code == 200
+    assert response.json()["code"] == booking_code
+
+
+def test_get_booking_not_found(client):
+    """Неверный код или неверная фамилия должны давать 404."""
+    flight_id = get_valid_flight_id(client)
+    payload = {
+        "flightId": flight_id,
+        "contact": {"email": "test@example.com", "phone": "+79991234567"},
+        "passengers": [
+            {
+                "firstName": "Иван",
+                "lastName": "Петров",
+                "dateOfBirth": "1990-05-20",
+                "documentNumber": "1",
+            }
+        ],
+    }
+    booking_code = client.post("/api/bookings", json=payload).json()["code"]
+
+    # Неверная фамилия
+    resp_wrong_name = client.get(f"/api/bookings/{booking_code}?lastName=Сидоров")
+    assert resp_wrong_name.status_code == 404
+    assert resp_wrong_name.json()["code"] == "not_found"
+
+    # Неверный код
+    resp_wrong_code = client.get("/api/bookings/FAKECODE?lastName=Петров")
+    assert resp_wrong_code.status_code == 404
+    assert resp_wrong_code.json()["code"] == "not_found"
+
+    # Отсутствующий lastName
+    resp_no_name = client.get(f"/api/bookings/{booking_code}")
+    assert resp_no_name.status_code == 404
+    assert resp_no_name.json()["code"] == "not_found"
+
+
+def test_cancel_booking_success(client):
+    """Успешная отмена брони меняет статус на cancelled."""
+    flight_id = get_valid_flight_id(client)
+    payload = {
+        "flightId": flight_id,
+        "contact": {"email": "test@example.com", "phone": "+79991234567"},
+        "passengers": [
+            {
+                "firstName": "Иван",
+                "lastName": "Петров",
+                "dateOfBirth": "1990-05-20",
+                "documentNumber": "1",
+            }
+        ],
+    }
+    booking_code = client.post("/api/bookings", json=payload).json()["code"]
+
+    response = client.post(
+        f"/api/bookings/{booking_code}/cancel", json={"lastName": "Петров"}
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["code"] == booking_code
+    assert data["status"] == "cancelled"
+
+
+def test_cancel_booking_repeated(client):
+    """Повторная отмена уже отмененной брони должна возвращать 200 и cancelled."""
+    flight_id = get_valid_flight_id(client)
+    payload = {
+        "flightId": flight_id,
+        "contact": {"email": "test@example.com", "phone": "+79991234567"},
+        "passengers": [
+            {
+                "firstName": "Иван",
+                "lastName": "Петров",
+                "dateOfBirth": "1990-05-20",
+                "documentNumber": "1",
+            }
+        ],
+    }
+    booking_code = client.post("/api/bookings", json=payload).json()["code"]
+
+    # Первая отмена
+    client.post(f"/api/bookings/{booking_code}/cancel", json={"lastName": "Петров"})
+
+    # Повторная отмена
+    response = client.post(
+        f"/api/bookings/{booking_code}/cancel", json={"lastName": "Петров"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+
+
+def test_cancel_booking_not_found(client):
+    """Отмена с неверными данными должна давать 404."""
+    flight_id = get_valid_flight_id(client)
+    payload = {
+        "flightId": flight_id,
+        "contact": {"email": "test@example.com", "phone": "+79991234567"},
+        "passengers": [
+            {
+                "firstName": "Иван",
+                "lastName": "Петров",
+                "dateOfBirth": "1990-05-20",
+                "documentNumber": "1",
+            }
+        ],
+    }
+    booking_code = client.post("/api/bookings", json=payload).json()["code"]
+
+    # Неверная фамилия
+    resp_wrong_name = client.post(
+        f"/api/bookings/{booking_code}/cancel", json={"lastName": "Сидоров"}
+    )
+    assert resp_wrong_name.status_code == 404
+    assert resp_wrong_name.json()["code"] == "not_found"
+
+    # Отсутствующий lastName в теле
+    resp_no_name = client.post(f"/api/bookings/{booking_code}/cancel", json={})
+    assert resp_no_name.status_code == 404
+    assert resp_no_name.json()["code"] == "not_found"
