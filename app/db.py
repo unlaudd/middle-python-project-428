@@ -3,6 +3,7 @@
 Использует асинхронный пул соединений psycopg_pool и управляет
 его жизненным циклом через механизм lifespan FastAPI.
 """
+
 import os
 from contextlib import asynccontextmanager
 
@@ -13,8 +14,7 @@ from psycopg_pool import AsyncConnectionPool
 load_dotenv()
 
 DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:postgres@localhost:5432/flight_booking"
+    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/flight_booking"
 )
 
 # Глобальная переменная для хранения пула
@@ -25,7 +25,7 @@ db_pool: AsyncConnectionPool | None = None
 async def lifespan(app: FastAPI):
     """Управляет жизненным циклом пула соединений с базой данных.
 
-    Создает и открывает пул при запуске приложения, 
+    Создает и открывает пул при запуске приложения,
     закрывает его при завершении.
     """
     global db_pool
