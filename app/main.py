@@ -1,24 +1,20 @@
-"""Основной модуль приложения для бронирования авиабилетов.
-
-Содержит фабрику приложения create_app, маршруты API и логику
-раздачи статических файлов с поддержкой SPA-fallback.
-"""
+"""Основной модуль приложения для бронирования авиабилетов."""
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.db import get_db_pool, lifespan
-from app.queries import get_flight_by_id, get_flights
+from app.queries import create_booking, get_flight_by_id, get_flights
+from app.schemas import BookingRequest
 
 
 def format_datetime(dt) -> str:
     """Форматирует datetime в ISO 8601 с суффиксом 'Z' (UTC)."""
     if dt is None:
         return ""
-    # Приводим к UTC и форматируем с Z на конце, как требует контракт
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -52,6 +48,37 @@ def format_flight(row: dict) -> dict:
     }
 
 
+def format_booking(booking_row: dict, passenger_rows: list[dict]) -> dict:
+    """Преобразует данные брони из БД в структуру ответа API."""
+    return {
+        "code": booking_row["code"],
+        "status": booking_row["status"],
+        "flight": format_flight(booking_row),
+        "passengers": [
+            {
+                "firstName": p["first_name"],
+                "lastName": p["last_name"],
+                "dateOfBirth": p["date_of_birth"].strftime("%Y-%m-%d")
+                if p["date_of_birth"]
+                else "",
+                "documentNumber": p["document_number"],
+            }
+            for p in passenger_rows
+        ],
+        "contact": {
+            "email": booking_row[
+                "contact_email"
+            ],  # Добавим это в SELECT выше, если нужно, или возьмем из запроса
+            "phone": booking_row["contact_phone"],
+        },
+        "totalPrice": {
+            "amount": booking_row["total_price_amount"],
+            "currency": "RUB",
+        },
+        "createdAt": format_datetime(booking_row["created_at"]),
+    }
+
+
 def create_app() -> FastAPI:
     """Создает и настраивает экземпляр приложения FastAPI."""
     app = FastAPI(lifespan=lifespan)
@@ -71,7 +98,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
-        code = "not_found" if exc.status_code == 404 else "error"
+        code = "not_found" if exc.status_code == 404 else "validation_error"
         return JSONResponse(
             status_code=exc.status_code,
             content={"code": code, "message": exc.detail},
@@ -128,6 +155,28 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="Рейс не найден")
 
         return format_flight(row)
+
+    @app.post("/api/bookings", status_code=status.HTTP_201_CREATED)
+    async def create_booking_endpoint(request: BookingRequest):
+        """Создает новую бронь."""
+        pool = get_db_pool()
+
+        # Преобразуем Pydantic модели в словари для queries
+        contact_dict = request.contact.model_dump()
+        passengers_list = [p.model_dump() for p in request.passengers]
+
+        try:
+            booking_row, passenger_rows = await create_booking(
+                pool, request.flightId, contact_dict, passengers_list
+            )
+        except ValueError as e:
+            if str(e) == "unknown_flight":
+                raise HTTPException(
+                    status_code=400, detail="Неизвестный идентификатор рейса"
+                )
+            raise
+
+        return format_booking(booking_row, passenger_rows)
 
     PUBLIC_DIR = Path(__file__).resolve().parent.parent / "public"
 
