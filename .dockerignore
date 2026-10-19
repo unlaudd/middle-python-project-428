@@ -1,0 +1,12 @@
+.git
+node_modules
+.venv
+tmp
+__pycache__
+.pytest_cache
+.ruff_cache
+
+# Собранную статику кладёт стадия frontend. Без этих строк рядом с ней окажутся файлы от
+# локальной сборки — с другими хешами в именах, то есть мусор.
+public/assets
+public/index.html
