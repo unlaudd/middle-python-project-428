@@ -1,4 +1,9 @@
-"""Основной модуль приложения для бронирования авиабилетов."""
+"""Main module for the flight booking application.
+
+Contains the FastAPI application factory, API routes, and logic
+for serving static files with SPA-fallback support for proper
+client-side routing.
+"""
 
 from pathlib import Path
 
@@ -18,14 +23,28 @@ from app.schemas import BookingRequest, CancelBookingRequest
 
 
 def format_datetime(dt) -> str:
-    """Форматирует datetime в ISO 8601 с суффиксом 'Z' (UTC)."""
+    """Format a datetime object to ISO 8601 with a 'Z' (UTC) suffix.
+
+    Args:
+        dt: The datetime object to format.
+
+    Returns:
+        str: The formatted datetime string, or an empty string if dt is None.
+    """
     if dt is None:
         return ""
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def format_flight(row: dict) -> dict:
-    """Преобразует плоскую строку из БД в структуру ответа API."""
+    """Transform a flat database row into the API response structure for a flight.
+
+    Args:
+        row: A dictionary representing a flat database row.
+
+    Returns:
+        dict: The formatted flight data matching the API contract.
+    """
     return {
         "id": row["id"],
         "flightNumber": row["flight_number"],
@@ -55,7 +74,15 @@ def format_flight(row: dict) -> dict:
 
 
 def format_booking(booking_row: dict, passenger_rows: list[dict]) -> dict:
-    """Преобразует данные брони из БД в структуру ответа API."""
+    """Transform database booking data into the API response structure.
+
+    Args:
+        booking_row: A dictionary representing the booking database row.
+        passenger_rows: A list of dictionaries representing passenger database rows.
+
+    Returns:
+        dict: The formatted booking data matching the API contract.
+    """
     return {
         "code": booking_row["code"],
         "status": booking_row["status"],
@@ -86,14 +113,22 @@ def format_booking(booking_row: dict, passenger_rows: list[dict]) -> dict:
 
 
 def create_app() -> FastAPI:
-    """Создает и настраивает экземпляр приложения FastAPI."""
+    """Create and configure the FastAPI application instance.
+
+    Initializes API routes, configures static file serving,
+    and registers the lifespan handler for database connection management.
+
+    Returns:
+        FastAPI: The configured FastAPI application instance.
+    """
     app = FastAPI(lifespan=lifespan)
 
-    # --- Глобальные обработчики ошибок ---
+    # --- Global Exception Handlers ---
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
         request: Request, exc: RequestValidationError
     ):
+        """Handle validation errors and return a 400 response."""
         return JSONResponse(
             status_code=400,
             content={
@@ -104,21 +139,34 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
+        """Handle HTTP exceptions and format the error response."""
         code = "not_found" if exc.status_code == 404 else "validation_error"
         return JSONResponse(
             status_code=exc.status_code,
             content={"code": code, "message": exc.detail},
         )
 
-    # --- Эндпоинты ---
+    # --- Endpoints ---
     @app.api_route("/api/health", methods=["GET", "HEAD"])
     async def health_check() -> dict:
-        """Проверка работоспособности приложения."""
+        """Check the application's health status.
+
+        Returns:
+            dict: A dictionary with an "ok" status.
+        """
         return {"status": "ok"}
 
     @app.api_route("/api/cities", methods=["GET", "HEAD"])
     async def get_cities() -> list:
-        """Возвращает список доступных городов из базы данных."""
+        """Retrieve the list of available cities from the database.
+
+        Ensures that Moscow (MOW) and Saint Petersburg (LED) are always
+        at the beginning of the list, as the frontend uses them for
+        default search.
+
+        Returns:
+            list: A list of dictionaries containing city information.
+        """
         pool = get_db_pool()
         async with pool.connection() as conn:
             async with conn.cursor() as cur:
@@ -146,14 +194,24 @@ def create_app() -> FastAPI:
         ),
         passengers: int = Query(default=1, ge=1, description="Количество пассажиров"),
     ):
-        """Ищет рейсы по заданным параметрам."""
+        """Search for flights based on the provided parameters."""
         pool = get_db_pool()
         rows = await get_flights(pool, origin, destination, date, passengers)
         return [format_flight(row) for row in rows]
 
     @app.get("/api/flights/{flight_id}")
     async def get_flight(flight_id: str):
-        """Получает информацию о конкретном рейсе по идентификатору."""
+        """Retrieve detailed information about a specific flight by its ID.
+
+        Args:
+            flight_id: The unique identifier of the flight.
+
+        Returns:
+            dict: The formatted flight data.
+
+        Raises:
+            HTTPException: 404 if the flight is not found.
+        """
         pool = get_db_pool()
         row = await get_flight_by_id(pool, flight_id)
 
@@ -164,10 +222,20 @@ def create_app() -> FastAPI:
 
     @app.post("/api/bookings", status_code=status.HTTP_201_CREATED)
     async def create_booking_endpoint(request: BookingRequest):
-        """Создает новую бронь."""
+        """Create a new booking.
+
+        Args:
+            request: The booking request payload.
+
+        Returns:
+            dict: The created booking details.
+
+        Raises:
+            HTTPException: 400 if the flight ID is unknown.
+        """
         pool = get_db_pool()
 
-        # Преобразуем Pydantic модели в словари для queries
+        # Convert Pydantic models to dictionaries for database queries
         contact_dict = request.contact.model_dump()
         passengers_list = [p.model_dump() for p in request.passengers]
 
@@ -186,7 +254,18 @@ def create_app() -> FastAPI:
 
     @app.get("/api/bookings/{code}")
     async def get_booking(code: str, lastName: str | None = Query(default=None)):
-        """Просматривает бронь по коду и фамилии пассажира."""
+        """Retrieve a booking by its code and passenger's last name.
+
+        Args:
+            code: The unique booking code.
+            lastName: The passenger's last name for verification.
+
+        Returns:
+            dict: The formatted booking details.
+
+        Raises:
+            HTTPException: 404 if the booking is not found or verification fails.
+        """
         pool = get_db_pool()
         result = await get_and_verify_booking(pool, code, lastName)
 
@@ -198,7 +277,18 @@ def create_app() -> FastAPI:
 
     @app.post("/api/bookings/{code}/cancel")
     async def cancel_booking_endpoint(code: str, request: CancelBookingRequest):
-        """Отменяет бронь по коду и фамилии пассажира."""
+        """Cancel a booking by its code and passenger's last name.
+
+        Args:
+            code: The unique booking code.
+            request: The cancellation request payload containing the last name.
+
+        Returns:
+            dict: The updated booking details with 'cancelled' status.
+
+        Raises:
+            HTTPException: 404 if the booking is not found or verification fails.
+        """
         pool = get_db_pool()
         result = await cancel_booking(pool, code, request.lastName)
 
@@ -212,7 +302,20 @@ def create_app() -> FastAPI:
 
     @app.api_route("/{path:path}", methods=["GET", "HEAD"])
     async def spa_fallback(path: str):
-        """Обрабатывает запросы к статическим файлам и реализует SPA-fallback."""
+        """Handle requests for static files and implement SPA-fallback.
+
+        If the requested path points to an existing file in the public directory,
+        it returns that file. Otherwise, it returns index.html to support
+        client-side routing. Requests to non-existent paths starting with 'api/'
+        return a JSON 404 response.
+
+        Args:
+            path: The relative path from the URL request.
+
+        Returns:
+            FileResponse: The requested static file or index.html.
+            JSONResponse: A 404 error in JSON format for non-existent API paths.
+        """
         if path.startswith("api/"):
             return JSONResponse(
                 status_code=404,

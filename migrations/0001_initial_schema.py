@@ -1,6 +1,6 @@
-"""Начальная миграция: создание всех таблиц и индексов.
+"""Initial migration: create all tables and indexes.
 
-Используем IF NOT EXISTS для безопасности при повторном применении.
+Uses IF NOT EXISTS for safety during repeated application.
 """
 
 from yoyo import step

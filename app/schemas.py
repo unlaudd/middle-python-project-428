@@ -1,17 +1,17 @@
-"""Схемы валидации входящих данных (Pydantic)."""
+"""Validation schemas for incoming request data (Pydantic)."""
 
 from pydantic import BaseModel, Field
 
 
 class ContactRequest(BaseModel):
-    """Схема запроса контактных данных."""
+    """Request schema for contact information."""
 
     email: str = Field(..., min_length=1, description="Email заказчика")
     phone: str = Field(..., min_length=1, description="Телефон заказчика")
 
 
 class PassengerRequest(BaseModel):
-    """Схема запроса данных пассажира."""
+    """Request schema for passenger data."""
 
     firstName: str = Field(..., min_length=1, description="Имя пассажира")
     lastName: str = Field(..., min_length=1, description="Фамилия пассажира")
@@ -22,7 +22,7 @@ class PassengerRequest(BaseModel):
 
 
 class BookingRequest(BaseModel):
-    """Схема запроса на создание бронирования."""
+    """Request schema for booking creation."""
 
     flightId: str = Field(..., min_length=1, description="Идентификатор рейса")
     contact: ContactRequest
@@ -32,7 +32,7 @@ class BookingRequest(BaseModel):
 
 
 class CancelBookingRequest(BaseModel):
-    """Схема запроса на отмену бронирования."""
+    """Request schema for booking cancellation."""
 
     lastName: str | None = Field(
         default=None, description="Фамилия пассажира для подтверждения"

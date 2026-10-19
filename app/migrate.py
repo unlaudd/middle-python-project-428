@@ -1,7 +1,7 @@
-"""Скрипт для применения миграций базы данных.
+"""Script for applying database migrations.
 
-Читает DATABASE_URL из .env файла и применяет все неприменённые
-миграции из директории migrations/.
+Reads DATABASE_URL from the .env file and applies all unapplied
+migrations from the migrations/ directory.
 """
 
 import os
@@ -13,7 +13,11 @@ load_dotenv()
 
 
 def apply_migrations():
-    """Применяет все неприменённые миграции к базе данных."""
+    """Apply all unapplied migrations to the database.
+
+    Raises:
+        ValueError: If DATABASE_URL is not set in the environment.
+    """
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         raise ValueError("DATABASE_URL не задан в окружении")

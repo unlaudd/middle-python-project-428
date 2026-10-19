@@ -1,4 +1,4 @@
-"""Тесты для эндпоинта создания бронирования."""
+"""Tests for the booking creation endpoint."""
 
 from datetime import datetime, timedelta, timezone
 
@@ -10,20 +10,20 @@ from app.main import create_app
 
 @pytest.fixture
 def client():
-    """Создает TestClient с корректным управлением lifespan."""
+    """Create a TestClient with proper lifespan management."""
     app = create_app()
     with TestClient(app) as test_client:
         yield test_client
 
 
 def get_test_date(days_offset: int = 0) -> str:
-    """Возвращает дату в формате YYYY-MM-DD со смещением от сегодня."""
+    """Return a date in YYYY-MM-DD format with an offset from today."""
     target_date = datetime.now(timezone.utc) + timedelta(days=days_offset)
     return target_date.strftime("%Y-%m-%d")
 
 
 def get_valid_flight_id(client) -> str:
-    """Вспомогательная функция для получения валидного ID рейса."""
+    """Helper function to get a valid flight ID."""
     date = get_test_date(1)
     resp = client.get(f"/api/flights?origin=MOW&destination=LED&date={date}")
     flights = resp.json()
@@ -33,7 +33,7 @@ def get_valid_flight_id(client) -> str:
 
 
 def test_create_booking_success(client):
-    """Успешное создание брони с одним пассажиром."""
+    """Successful booking creation with one passenger."""
     flight_id = get_valid_flight_id(client)
 
     payload = {
@@ -44,7 +44,7 @@ def test_create_booking_success(client):
                 "firstName": "Иван",
                 "lastName": "Петров",
                 "dateOfBirth": "1990-05-20",
-                "documentNumber": "1",  # Минимально валидное значение по ТЗ
+                "documentNumber": "1",  # Minimal valid value per requirements
             }
         ],
     }
@@ -63,10 +63,10 @@ def test_create_booking_success(client):
 
 
 def test_create_booking_multiple_passengers(client):
-    """Стоимость должна умножаться на количество пассажиров."""
+    """Total price should be multiplied by the number of passengers."""
     flight_id = get_valid_flight_id(client)
 
-    # Сначала узнаем цену рейса
+    # First, get the flight price
     flight_resp = client.get(f"/api/flights/{flight_id}")
     flight_price = flight_resp.json()["price"]["amount"]
 
@@ -99,7 +99,7 @@ def test_create_booking_multiple_passengers(client):
 
 
 def test_create_booking_empty_passengers(client):
-    """Пустой список пассажиров должен возвращать 400."""
+    """Empty passenger list should return 400."""
     flight_id = get_valid_flight_id(client)
 
     payload = {
@@ -115,7 +115,7 @@ def test_create_booking_empty_passengers(client):
 
 
 def test_create_booking_missing_field(client):
-    """Отсутствие обязательного поля (например, lastName) должно возвращать 400."""
+    """Missing required field (e.g., lastName) should return 400."""
     flight_id = get_valid_flight_id(client)
 
     payload = {
@@ -126,7 +126,7 @@ def test_create_booking_missing_field(client):
                 "firstName": "Иван",
                 "dateOfBirth": "1990-05-20",
                 "documentNumber": "1",
-            }  # нет lastName
+            }  # missing lastName
         ],
     }
 
@@ -137,7 +137,7 @@ def test_create_booking_missing_field(client):
 
 
 def test_create_booking_unknown_flight(client):
-    """Неизвестный flightId должен возвращать 400."""
+    """Unknown flightId should return 400."""
     payload = {
         "flightId": "FAKE_FLIGHT_ID_123",
         "contact": {"email": "test@example.com", "phone": "+79991234567"},
@@ -159,8 +159,8 @@ def test_create_booking_unknown_flight(client):
 
 
 def test_get_booking_success(client):
-    """Успешный просмотр брони по коду и фамилии."""
-    # 1. Создаем бронь
+    """Successful booking retrieval by code and last name."""
+    # 1. Create a booking
     flight_id = get_valid_flight_id(client)
     payload = {
         "flightId": flight_id,
@@ -177,7 +177,7 @@ def test_get_booking_success(client):
     create_resp = client.post("/api/bookings", json=payload)
     booking_code = create_resp.json()["code"]
 
-    # 2. Ищем её
+    # 2. Retrieve it
     response = client.get(f"/api/bookings/{booking_code}?lastName=Петров")
 
     assert response.status_code == 200
@@ -187,7 +187,7 @@ def test_get_booking_success(client):
 
 
 def test_get_booking_case_insensitive(client):
-    """Поиск должен работать независимо от регистра и пробелов."""
+    """Search should work regardless of case and extra spaces."""
     flight_id = get_valid_flight_id(client)
     payload = {
         "flightId": flight_id,
@@ -203,14 +203,14 @@ def test_get_booking_case_insensitive(client):
     }
     booking_code = client.post("/api/bookings", json=payload).json()["code"]
 
-    # Разный регистр и лишние пробелы
+    # Different case and extra spaces
     response = client.get(f"/api/bookings/{booking_code}?lastName=  петров  ")
     assert response.status_code == 200
     assert response.json()["code"] == booking_code
 
 
 def test_get_booking_not_found(client):
-    """Неверный код или неверная фамилия должны давать 404."""
+    """Incorrect code or last name should return 404."""
     flight_id = get_valid_flight_id(client)
     payload = {
         "flightId": flight_id,
@@ -226,24 +226,24 @@ def test_get_booking_not_found(client):
     }
     booking_code = client.post("/api/bookings", json=payload).json()["code"]
 
-    # Неверная фамилия
+    # Incorrect last name
     resp_wrong_name = client.get(f"/api/bookings/{booking_code}?lastName=Сидоров")
     assert resp_wrong_name.status_code == 404
     assert resp_wrong_name.json()["code"] == "not_found"
 
-    # Неверный код
+    # Incorrect code
     resp_wrong_code = client.get("/api/bookings/FAKECODE?lastName=Петров")
     assert resp_wrong_code.status_code == 404
     assert resp_wrong_code.json()["code"] == "not_found"
 
-    # Отсутствующий lastName
+    # Missing lastName
     resp_no_name = client.get(f"/api/bookings/{booking_code}")
     assert resp_no_name.status_code == 404
     assert resp_no_name.json()["code"] == "not_found"
 
 
 def test_cancel_booking_success(client):
-    """Успешная отмена брони меняет статус на cancelled."""
+    """Successful booking cancellation changes status to cancelled."""
     flight_id = get_valid_flight_id(client)
     payload = {
         "flightId": flight_id,
@@ -270,7 +270,10 @@ def test_cancel_booking_success(client):
 
 
 def test_cancel_booking_repeated(client):
-    """Повторная отмена уже отмененной брони должна возвращать 200 и cancelled."""
+    """Repeated cancellation of an already cancelled booking.
+
+    Should return 200 and status 'cancelled'.
+    """
     flight_id = get_valid_flight_id(client)
     payload = {
         "flightId": flight_id,
@@ -286,10 +289,10 @@ def test_cancel_booking_repeated(client):
     }
     booking_code = client.post("/api/bookings", json=payload).json()["code"]
 
-    # Первая отмена
+    # First cancellation
     client.post(f"/api/bookings/{booking_code}/cancel", json={"lastName": "Петров"})
 
-    # Повторная отмена
+    # Repeated cancellation
     response = client.post(
         f"/api/bookings/{booking_code}/cancel", json={"lastName": "Петров"}
     )
@@ -299,7 +302,7 @@ def test_cancel_booking_repeated(client):
 
 
 def test_cancel_booking_not_found(client):
-    """Отмена с неверными данными должна давать 404."""
+    """Cancellation with incorrect data should return 404."""
     flight_id = get_valid_flight_id(client)
     payload = {
         "flightId": flight_id,
@@ -315,14 +318,14 @@ def test_cancel_booking_not_found(client):
     }
     booking_code = client.post("/api/bookings", json=payload).json()["code"]
 
-    # Неверная фамилия
+    # Incorrect last name
     resp_wrong_name = client.post(
         f"/api/bookings/{booking_code}/cancel", json={"lastName": "Сидоров"}
     )
     assert resp_wrong_name.status_code == 404
     assert resp_wrong_name.json()["code"] == "not_found"
 
-    # Отсутствующий lastName в теле
+    # Missing lastName in body
     resp_no_name = client.post(f"/api/bookings/{booking_code}/cancel", json={})
     assert resp_no_name.status_code == 404
     assert resp_no_name.json()["code"] == "not_found"

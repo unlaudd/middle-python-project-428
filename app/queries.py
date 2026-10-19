@@ -1,6 +1,7 @@
-"""Модуль с SQL-запросами к базе данных.
+"""Module containing SQL queries for database operations.
 
-Содержит функции для поиска рейсов и получения рейса по идентификатору.
+Includes functions for flight search, flight retrieval by ID,
+booking creation, and booking management.
 """
 
 import random
@@ -19,17 +20,17 @@ async def get_flights(
     date: str,
     passengers: int,
 ) -> list[dict]:
-    """Ищет рейсы по заданным параметрам.
+    """Search for flights based on the provided parameters.
 
     Args:
-        pool: Активный пул соединений с БД.
-        origin: Код города вылета.
-        destination: Код города прилета.
-        date: Дата вылета в формате YYYY-MM-DD.
-        passengers: Требуемое количество свободных мест.
+        pool: Active database connection pool.
+        origin: Departure city code.
+        destination: Arrival city code.
+        date: Departure date in YYYY-MM-DD format.
+        passengers: Required number of available seats.
 
     Returns:
-        list[dict]: Список найденных рейсов в виде словарей.
+        list[dict]: List of found flights as dictionaries.
     """
     start_dt = f"{date}T00:00:00Z"
     end_dt = f"{date}T23:59:59Z"
@@ -57,7 +58,7 @@ async def get_flights(
     """
 
     async with pool.connection() as conn:
-        # Используем dict_row для автоматического преобразования строк в словари
+        # Use dict_row for automatic conversion of rows to dictionaries
         async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
                 query, (origin, destination, passengers, start_dt, end_dt)
@@ -66,14 +67,14 @@ async def get_flights(
 
 
 async def get_flight_by_id(pool: AsyncConnectionPool, flight_id: str) -> dict | None:
-    """Получает полную информацию о рейсе по его идентификатору.
+    """Retrieve complete flight information by its identifier.
 
     Args:
-        pool: Активный пул соединений с БД.
-        flight_id: Идентификатор рейса.
+        pool: Active database connection pool.
+        flight_id: The flight identifier.
 
     Returns:
-        dict | None: Словарь с данными рейса или None, если рейс не найден.
+        dict | None: Dictionary with flight data or None if not found.
     """
     query = """
         SELECT 
@@ -99,9 +100,12 @@ async def get_flight_by_id(pool: AsyncConnectionPool, flight_id: str) -> dict | 
 
 
 def generate_booking_code() -> str:
-    """Генерирует уникальный 6-значный код брони.
+    """Generate a unique 6-character booking code.
 
-    Исключает символы 0, O, 1, I для удобства чтения и диктовки.
+    Excludes characters 0, O, 1, I for easier reading and dictation.
+
+    Returns:
+        str: A 6-character alphanumeric booking code.
     """
     alphabet = "".join(
         c for c in string.ascii_uppercase + string.digits if c not in "0O1I"
@@ -115,26 +119,26 @@ async def create_booking(
     contact: dict,
     passengers: list[dict],
 ) -> tuple[dict, list[dict]]:
-    """Создает бронь и записи пассажиров в одной транзакции.
+    """Create a booking and passenger records in a single transaction.
 
     Args:
-        pool: Активный пул соединений с БД.
-        flight_id: Идентификатор рейса.
-        contact: Словарь с контактами (email, phone).
-        passengers: Список словарей с данными пассажиров.
+        pool: Active database connection pool.
+        flight_id: The flight identifier.
+        contact: Dictionary with contact information (email, phone).
+        passengers: List of dictionaries with passenger data.
 
     Returns:
-        tuple[dict, list[dict]]: Кортеж из данных созданной брони
-                                 и списка пассажиров.
+        tuple[dict, list[dict]]: Tuple of created booking data
+                                 and passenger list.
 
     Raises:
-        ValueError: Если рейс с таким ID не найден.
-        RuntimeError: Если не удалось сгенерировать уникальный код
-                      после нескольких попыток.
+        ValueError: If the flight with the given ID is not found.
+        RuntimeError: If unable to generate a unique code
+                      after multiple attempts.
     """
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
-            # 1. Проверяем существование рейса и получаем его цену
+            # 1. Check flight existence and retrieve its price
             await cur.execute(
                 "SELECT id, price_amount FROM flights WHERE id = %s",
                 (flight_id,),
@@ -146,15 +150,15 @@ async def create_booking(
             total_price = flight["price_amount"] * len(passengers)
             created_at = datetime.now(timezone.utc)
 
-            # 2. Пытаемся создать бронь с уникальным кодом
-            # (защита от коллизий)
+            # 2. Attempt to create booking with unique code
+            # (collision protection)
             max_retries = 5
             for _ in range(max_retries):
                 code = generate_booking_code()
                 try:
-                    # Начинаем транзакцию
+                    # Begin transaction
                     async with conn.transaction():
-                        # Вставка брони
+                        # Insert booking
                         await cur.execute(
                             """
                             INSERT INTO bookings 
@@ -172,8 +176,8 @@ async def create_booking(
                             ),
                         )
 
-                        # Вставка пассажиров (цикл надежнее executemany
-                        # в некоторых версиях async psycopg)
+                        # Insert passengers (loop is more reliable than
+                        # executemany in some async psycopg versions)
                         for p in passengers:
                             await cur.execute(
                                 """
@@ -191,7 +195,7 @@ async def create_booking(
                                 ),
                             )
 
-                        # Получаем собранную информацию о брони для ответа
+                        # Retrieve assembled booking information for response
                         await cur.execute(
                             """
                             SELECT 
@@ -216,7 +220,7 @@ async def create_booking(
                         )
                         booking_row = await cur.fetchone()
 
-                        # Получаем пассажиров этой брони
+                        # Retrieve passengers for this booking
                         await cur.execute(
                             """
                             SELECT first_name, last_name, date_of_birth, 
@@ -231,8 +235,8 @@ async def create_booking(
                         return booking_row, passenger_rows
 
                 except UniqueViolation:
-                    # Код уже занят, откат транзакции происходит автоматически,
-                    # цикл продолжается с новым кодом
+                    # Code already taken, transaction rollback is automatic,
+                    # loop continues with new code
                     continue
 
             raise RuntimeError("Не удалось сгенерировать уникальный код брони")
@@ -241,15 +245,15 @@ async def create_booking(
 async def get_and_verify_booking(
     pool: AsyncConnectionPool, code: str, last_name: str | None
 ) -> tuple[dict, list[dict]] | None:
-    """Ищет бронь по коду и проверяет фамилию пассажира.
+    """Search for a booking by code and verify passenger's last name.
 
     Args:
-        pool: Активный пул соединений с БД.
-        code: Код брони.
-        last_name: Фамилия для проверки.
+        pool: Active database connection pool.
+        code: The booking code.
+        last_name: Last name for verification.
 
     Returns:
-        tuple[dict, list[dict]] | None: Данные брони и пассажиров, или None.
+        tuple[dict, list[dict]] | None: Booking and passenger data, or None.
     """
     if not last_name:
         return None
@@ -259,7 +263,7 @@ async def get_and_verify_booking(
 
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
-            # Шаг 1: Проверяем существование брони и совпадение фамилии
+            # Step 1: Check booking existence and last name match
             await cur.execute(
                 """
                 SELECT 1 FROM bookings b
@@ -271,7 +275,7 @@ async def get_and_verify_booking(
             if not await cur.fetchone():
                 return None
 
-            # Шаг 2: Забираем полные данные брони
+            # Step 2: Retrieve complete booking data
             await cur.execute(
                 """
                 SELECT 
@@ -297,7 +301,7 @@ async def get_and_verify_booking(
             if not booking_row:
                 return None
 
-            # Шаг 3: Забираем всех пассажиров этой брони
+            # Step 3: Retrieve all passengers for this booking
             await cur.execute(
                 """
                 SELECT first_name, last_name, date_of_birth, document_number 
@@ -313,18 +317,18 @@ async def get_and_verify_booking(
 async def cancel_booking(
     pool: AsyncConnectionPool, code: str, last_name: str | None
 ) -> tuple[dict, list[dict]] | None:
-    """Отменяет бронь, если код и фамилия совпадают.
+    """Cancel a booking if code and last name match.
 
     Args:
-        pool: Активный пул соединений с БД.
-        code: Код брони.
-        last_name: Фамилия для проверки.
+        pool: Active database connection pool.
+        code: The booking code.
+        last_name: Last name for verification.
 
     Returns:
-        tuple[dict, list[dict]] | None: Обновленные данные брони и пассажиров,
-                                        или None, если проверка не прошла.
+        tuple[dict, list[dict]] | None: Updated booking and passenger data,
+                                        or None if verification failed.
     """
-    # Сначала проверяем, что бронь существует и фамилия верна
+    # First verify that booking exists and last name is correct
     result = await get_and_verify_booking(pool, code, last_name)
     if not result:
         return None
@@ -332,7 +336,7 @@ async def cancel_booking(
     booking_row, passenger_rows = result
     code = code.strip().upper()
 
-    # Обновляем статус на cancelled
+    # Update status to cancelled
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
@@ -340,6 +344,6 @@ async def cancel_booking(
                 (code,),
             )
 
-    # Возвращаем обновленные данные (меняем статус в словаре для ответа)
+    # Return updated data (change status in dictionary for response)
     booking_row["status"] = "cancelled"
     return booking_row, passenger_rows

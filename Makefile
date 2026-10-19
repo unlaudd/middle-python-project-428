@@ -2,34 +2,34 @@
 
 .DEFAULT_GOAL := help
 
-help: ## Показать это справочное сообщение со списком доступных команд
+help: ## Show this help message with a list of available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-install: ## Установить зависимости проекта (Python через uv и Node.js через npm)
+install: ## Install project dependencies (Python via uv and Node.js via npm)
 	uv sync
 	npm ci
 
-build: ## Собрать фронтенд и скопировать статические файлы в директорию public/
+build: ## Build the frontend and copy static files to the public/ directory
 	rm -rf public/assets public/index.html
 	mkdir -p public
 	cp -R node_modules/@hexlet/python-flight-booking-frontend/dist/. public/
 
-contract: ## Сгенерировать OpenAPI спецификацию из TypeSpec контракта
+contract: ## Generate OpenAPI specification from the TypeSpec contract
 	npx tsp compile contract
 
-migrate: ## Применить миграции базы данных
+migrate: ## Apply database migrations
 	uv run python -m app.migrate
 
-seed: ## Залить справочные данные (идемпотентно)
+seed: ## Seed reference data (idempotently)
 	uv run python -m app.seed
 
-start: migrate seed ## Применить миграции, залить данные и запустить сервер
+start: migrate seed ## Apply migrations, seed data, and start the server
 	uv run uvicorn --factory app.main:create_app --host 0.0.0.0 --port $${PORT:-8080}
 
-test: ## Запустить тесты с помощью pytest
+test: ## Run tests using pytest
 	uv run pytest -v
 
-clean: ## Очистить сгенерированные файлы, кэш и виртуальные окружения
+clean: ## Clean generated files, caches, and virtual environments
 	rm -rf public
 	rm -rf .venv
 	rm -rf node_modules
