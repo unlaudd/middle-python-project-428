@@ -1,6 +1,8 @@
 """Validation schemas for incoming request data (Pydantic)."""
 
-from pydantic import BaseModel, Field
+from datetime import date as date_type
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class ContactRequest(BaseModel):
@@ -15,9 +17,7 @@ class PassengerRequest(BaseModel):
 
     firstName: str = Field(..., min_length=1, description="Имя пассажира")
     lastName: str = Field(..., min_length=1, description="Фамилия пассажира")
-    dateOfBirth: str = Field(
-        ..., min_length=1, description="Дата рождения (YYYY-MM-DD)"
-    )
+    dateOfBirth: date_type = Field(..., description="Дата рождения (YYYY-MM-DD)")
     documentNumber: str = Field(..., min_length=1, description="Номер документа")
 
 
@@ -37,3 +37,11 @@ class CancelBookingRequest(BaseModel):
     lastName: str | None = Field(
         default=None, description="Фамилия пассажира для подтверждения"
     )
+
+    @field_validator("lastName")
+    @classmethod
+    def validate_last_name(cls, v: str | None) -> str | None:
+        """Validate that lastName is not empty if provided."""
+        if v is not None and v.strip() == "":
+            return None
+        return v

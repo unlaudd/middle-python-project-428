@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
   pull_request:
-    branches: [ main, master ]
+    branches:
 
 jobs:
   test:
@@ -55,6 +55,9 @@ jobs:
         run: make seed
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flight_booking
+
+      - name: Run linter
+        run: make lint
 
       - name: Run tests
         run: make test

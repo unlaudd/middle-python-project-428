@@ -5,6 +5,8 @@ for serving static files with SPA-fallback support for proper
 client-side routing.
 """
 
+from datetime import date as date_type
+from datetime import timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request, status
@@ -33,7 +35,9 @@ def format_datetime(dt) -> str:
     """
     if dt is None:
         return ""
-    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Convert to UTC explicitly before formatting
+    utc_dt = dt.astimezone(timezone.utc)
+    return utc_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def format_flight(row: dict) -> dict:
@@ -189,14 +193,14 @@ def create_app() -> FastAPI:
         destination: str = Query(
             ..., pattern=r"^[A-Z]{3}$", description="Код города прилета"
         ),
-        date: str = Query(
-            ..., pattern=r"^\d{4}-\d{2}-\d{2}$", description="Дата вылета (YYYY-MM-DD)"
-        ),
+        date: date_type = Query(..., description="Дата вылета (YYYY-MM-DD)"),
         passengers: int = Query(default=1, ge=1, description="Количество пассажиров"),
     ):
         """Search for flights based on the provided parameters."""
         pool = get_db_pool()
-        rows = await get_flights(pool, origin, destination, date, passengers)
+        rows = await get_flights(
+            pool, origin, destination, date.isoformat(), passengers
+        )
         return [format_flight(row) for row in rows]
 
     @app.get("/api/flights/{flight_id}")
@@ -276,7 +280,9 @@ def create_app() -> FastAPI:
         return format_booking(booking_row, passenger_rows)
 
     @app.post("/api/bookings/{code}/cancel")
-    async def cancel_booking_endpoint(code: str, request: CancelBookingRequest):
+    async def cancel_booking_endpoint(
+        code: str, request: CancelBookingRequest | None = None
+    ):
         """Cancel a booking by its code and passenger's last name.
 
         Args:
@@ -290,7 +296,8 @@ def create_app() -> FastAPI:
             HTTPException: 404 if the booking is not found or verification fails.
         """
         pool = get_db_pool()
-        result = await cancel_booking(pool, code, request.lastName)
+        last_name = request.lastName if request else None
+        result = await cancel_booking(pool, code, last_name)
 
         if not result:
             raise HTTPException(status_code=404, detail="Бронь не найдена")

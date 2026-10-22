@@ -46,6 +46,12 @@ async def lifespan(app: FastAPI):
     )
     # Explicitly open the pool
     await db_pool.open()
+
+    # Set timezone to UTC for all connections
+    async with db_pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SET TIME ZONE 'UTC'")
+
     yield
     await db_pool.close()
     db_pool = None

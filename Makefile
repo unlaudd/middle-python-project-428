@@ -26,6 +26,10 @@ seed: ## Seed reference data (idempotently)
 start: migrate seed ## Apply migrations, seed data, and start the server
 	uv run uvicorn --factory app.main:create_app --host 0.0.0.0 --port $${PORT:-8080}
 
+lint: ## Run linter and formatter checks
+	uv run ruff check .
+	uv run ruff format --check .
+
 test: ## Run tests using pytest
 	uv run pytest -v
 
@@ -33,5 +37,4 @@ clean: ## Clean generated files, caches, and virtual environments
 	rm -rf public
 	rm -rf .venv
 	rm -rf node_modules
-	rm -f uv.lock package-lock.json
 	rm -f openapi.yaml

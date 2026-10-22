@@ -4,7 +4,7 @@ Includes functions for flight search, flight retrieval by ID,
 booking creation, and booking management.
 """
 
-import random
+import secrets
 import string
 from datetime import datetime, timezone
 
@@ -32,9 +32,6 @@ async def get_flights(
     Returns:
         list[dict]: List of found flights as dictionaries.
     """
-    start_dt = f"{date}T00:00:00Z"
-    end_dt = f"{date}T23:59:59Z"
-
     query = """
         SELECT 
             f.id, f.flight_number, f.duration_minutes, 
@@ -52,17 +49,14 @@ async def get_flights(
         WHERE f.origin_code = %s
           AND f.destination_code = %s
           AND f.seats_available >= %s
-          AND f.departure_at >= %s::timestamptz
-          AND f.departure_at < (%s::timestamptz + interval '1 day')
+          AND (f.departure_at AT TIME ZONE 'UTC')::date = %s
         ORDER BY f.departure_at
     """
 
     async with pool.connection() as conn:
         # Use dict_row for automatic conversion of rows to dictionaries
         async with conn.cursor(row_factory=dict_row) as cur:
-            await cur.execute(
-                query, (origin, destination, passengers, start_dt, end_dt)
-            )
+            await cur.execute(query, (origin, destination, passengers, date))
             return await cur.fetchall()
 
 
@@ -100,9 +94,10 @@ async def get_flight_by_id(pool: AsyncConnectionPool, flight_id: str) -> dict | 
 
 
 def generate_booking_code() -> str:
-    """Generate a unique 6-character booking code.
+    """Generate a secure unique 6-character booking code.
 
     Excludes characters 0, O, 1, I for easier reading and dictation.
+    Uses secrets module for cryptographically secure random generation.
 
     Returns:
         str: A 6-character alphanumeric booking code.
@@ -110,7 +105,7 @@ def generate_booking_code() -> str:
     alphabet = "".join(
         c for c in string.ascii_uppercase + string.digits if c not in "0O1I"
     )
-    return "".join(random.choices(alphabet, k=6))
+    return "".join(secrets.choice(alphabet) for _ in range(6))
 
 
 async def create_booking(

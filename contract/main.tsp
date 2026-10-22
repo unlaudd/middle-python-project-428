@@ -132,7 +132,7 @@ op getBooking(
 
 // 7. Отмена брони
 model CancelBookingRequest {
-  lastName: string;
+  lastName?: string;
 }
 
 @route("/api/bookings/{code}/cancel")

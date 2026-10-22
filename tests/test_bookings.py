@@ -27,8 +27,7 @@ def get_valid_flight_id(client) -> str:
     date = get_test_date(1)
     resp = client.get(f"/api/flights?origin=MOW&destination=LED&date={date}")
     flights = resp.json()
-    if not flights:
-        pytest.skip("Нет доступных рейсов для тестирования")
+    assert flights, "No flights available for testing - seed data may be broken"
     return flights[0]["id"]
 
 
@@ -329,3 +328,72 @@ def test_cancel_booking_not_found(client):
     resp_no_name = client.post(f"/api/bookings/{booking_code}/cancel", json={})
     assert resp_no_name.status_code == 404
     assert resp_no_name.json()["code"] == "not_found"
+
+
+def test_get_booking_by_second_passenger(client):
+    """Booking should be retrievable by any passenger's last name."""
+    flight_id = get_valid_flight_id(client)
+    payload = {
+        "flightId": flight_id,
+        "contact": {"email": "test@example.com", "phone": "+79991234567"},
+        "passengers": [
+            {
+                "firstName": "Иван",
+                "lastName": "Петров",
+                "dateOfBirth": "1990-05-20",
+                "documentNumber": "1",
+            },
+            {
+                "firstName": "Мария",
+                "lastName": "Сидорова",
+                "dateOfBirth": "1992-08-15",
+                "documentNumber": "2",
+            },
+        ],
+    }
+    booking_code = client.post("/api/bookings", json=payload).json()["code"]
+
+    # Search by second passenger's last name
+    response = client.get(f"/api/bookings/{booking_code}?lastName=Сидорова")
+    assert response.status_code == 200
+    assert response.json()["code"] == booking_code
+
+
+def test_search_flights_today(client):
+    """Search for flights today should work correctly."""
+    date = get_test_date(0)  # Today
+    response = client.get(
+        f"/api/flights?origin=MOW&destination=LED&date={date}&passengers=1"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+
+    # All flights should be for today
+    for flight in data:
+        departure_date = flight["departureAt"][:10]
+        assert departure_date == date
+
+
+def test_cancel_booking_without_body(client):
+    """Cancellation without request body should return 404."""
+    flight_id = get_valid_flight_id(client)
+    payload = {
+        "flightId": flight_id,
+        "contact": {"email": "test@example.com", "phone": "+79991234567"},
+        "passengers": [
+            {
+                "firstName": "Иван",
+                "lastName": "Петров",
+                "dateOfBirth": "1990-05-20",
+                "documentNumber": "1",
+            }
+        ],
+    }
+    booking_code = client.post("/api/bookings", json=payload).json()["code"]
+
+    # Send POST without body
+    response = client.post(f"/api/bookings/{booking_code}/cancel")
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"

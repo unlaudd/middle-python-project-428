@@ -79,8 +79,7 @@ def test_get_flight_by_id_success(client):
     search_resp = client.get(f"/api/flights?origin=MOW&destination=LED&date={date}")
     flights = search_resp.json()
 
-    if not flights:
-        pytest.skip("Нет рейсов для тестирования (возможно, проблема с seed)")
+    assert flights, "No flights available for testing - seed data may be broken"
 
     flight_id = flights[0]["id"]
 
@@ -98,3 +97,21 @@ def test_get_flight_by_id_not_found(client):
 
     assert response.status_code == 404
     assert response.json() == {"code": "not_found", "message": "Рейс не найден"}
+
+
+def test_search_flights_correct_date_only(client):
+    """Search should return flights only for the requested date."""
+    date = get_test_date(1)  # Tomorrow
+    response = client.get(
+        f"/api/flights?origin=MOW&destination=LED&date={date}&passengers=1"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # All returned flights must have departure date matching the requested date
+    for flight in data:
+        departure_date = flight["departureAt"][:10]  # Extract YYYY-MM-DD
+        assert departure_date == date, (
+            f"Flight departs on {departure_date}, expected {date}"
+        )
